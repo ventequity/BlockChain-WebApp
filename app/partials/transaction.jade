@@ -22,7 +22,10 @@
             .to
               strong
                 span(translate="TO")
-                span.result {{ to }}                
+                span.result {{ to }}    
+              span.label.label-warning(translate="UNCLAIMED", ng-show="claimed == false")     
+              span.label.label-success(translate="CLAIMED", ng-show="claimed")           
+                    
                 
           .col-xs-12.col-md-5
             amount(transaction="transaction" btc)

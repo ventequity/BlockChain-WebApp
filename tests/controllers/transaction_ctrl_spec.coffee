@@ -146,6 +146,9 @@ describe "TransactionCtrl", ->
       expect(scope.to).toBe("Savings")
     )
     
+    it "redeemed should be null", ->
+      expect(scope.claimed).toBeNull()
+    
     describe "email", ->
       beforeEach ->
         scope.to = null
@@ -172,10 +175,14 @@ describe "TransactionCtrl", ->
       
       
       it "should be marked as unredeemed", ->
-        pending()
+        expect(scope.claimed).toBe(false)
         
-      it "should display redeem date", ->
-        pending()
+        
+      it "should be marked as redeemed", ->
+        scope.transaction.to.email.redeemedAt = 123456
+        scope.transaction.hash = "1234" # trigger update
+        scope.$digest() 
+        expect(scope.claimed).toBe(true)
       
     describe "mobile", ->
       beforeEach ->
@@ -201,3 +208,12 @@ describe "TransactionCtrl", ->
     
       it "should show mobile number",  ->
         expect(scope.to).toBe("+123") 
+        
+      it "should be marked as unredeemed", ->
+        expect(scope.claimed).toBe(false)
+        
+      it "should be marked as redeemed", ->
+        scope.transaction.to.mobile.redeemedAt = 123456
+        scope.transaction.hash = "1234" # trigger update
+        scope.$digest() 
+        expect(scope.claimed).toBe(true)

@@ -15,6 +15,7 @@
     
     $scope.from = ""
     $scope.to = ""
+    $scope.claimed = null # email / mobile
     
     $scope.transaction = {} # {from_account: null, to_account: null, from_address: null, to_address: null}
     
@@ -54,8 +55,10 @@
               $scope.to = tx.to.externalAddresses.addressWithLargestOutput
           else if tx.to.email?
             $scope.to = tx.to.email.email
+            $scope.claimed = !!tx.to.email.redeemedAt
           else if tx.to.mobile?
             $scope.to = tx.to.mobile.number
+            $scope.claimed = !!tx.to.mobile.redeemedAt
         
   # First load:      
   $scope.didLoad()
