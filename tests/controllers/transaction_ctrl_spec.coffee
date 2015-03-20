@@ -145,3 +145,59 @@ describe "TransactionCtrl", ->
       
       expect(scope.to).toBe("Savings")
     )
+    
+    describe "email", ->
+      beforeEach ->
+        scope.to = null
+        
+        scope.transaction =
+          hash: "123"
+          from:
+            account: 
+              index: 0
+            legacyAddresses: []
+            external: null
+          to:
+            account: null
+            legacyAddresses: []
+            external: null
+            email: 
+              email: "info@blockchain.com"
+              redeemedAt: null
+          
+        scope.$digest()  
+    
+      it "should show email address",  ->
+        expect(scope.to).toBe("info@blockchain.com")
+      
+      
+      it "should be marked as unredeemed", ->
+        pending()
+        
+      it "should display redeem date", ->
+        pending()
+      
+    describe "mobile", ->
+      beforeEach ->
+        scope.to = null
+        
+        scope.transaction =
+          hash: "123"
+          from:
+            account: 
+              index: 0
+            legacyAddresses: []
+            external: null
+          to:
+            account: null
+            legacyAddresses: []
+            external: null
+            email: null
+            mobile: 
+              number: "+123"
+              redeemedAt: null
+          
+        scope.$digest()  
+    
+      it "should show mobile number",  ->
+        expect(scope.to).toBe("+123") 

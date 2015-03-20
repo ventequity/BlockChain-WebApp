@@ -52,7 +52,10 @@
             $scope.to = Wallet.addressBook[tx.to.externalAddresses.addressWithLargestOutput]
             unless $scope.to
               $scope.to = tx.to.externalAddresses.addressWithLargestOutput
-
+          else if tx.to.email?
+            $scope.to = tx.to.email.email
+          else if tx.to.mobile?
+            $scope.to = tx.to.mobile.number
         
   # First load:      
   $scope.didLoad()
