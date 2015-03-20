@@ -546,15 +546,16 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, $rootScope,
           if destination.index?
             wallet.my.sendToAccount(from.index, destination.index, amount, 10000, null, success, error, {}, needsSecondPassword)
           else if destination.address?
-            wallet.my.sendBitcoinsForAccount(from.index, destination.address, amount, 10000, null, success, error, {}, needsSecondPassword)
+            if wallet.isValidEmail(destination.address)
+              wallet.my.sendToEmail(from.index, amount, 10000, destination.address, success, error, {}, needsSecondPassword)
+            else if wallet.isValidMobile(destination.address)
+              wallet.my.sendToMobile(from.index, amount, 10000, destination.address, success, error, {}, needsSecondPassword)
+            else
+              wallet.my.sendBitcoinsForAccount(from.index, destination.address, amount, 10000, null, success, error, {}, needsSecondPassword)
     
       sweepLegacyAddressToAccount: (fromAddress, toAccountIndex) ->
         wallet.my.sweepLegacyAddressToAccount(fromAddress.address, toAccountIndex, success, error, {}, needsSecondPassword)
-        wallet.updateLegacyAddresses() # Probably too early  
-      
-      sendToEmail: (fromAccountIndex, email, amount, currency) ->
-        amount = wallet.checkAndGetTransactionAmount(amount, currency, success, error)
-        wallet.my.sendToEmail(fromAccountIndex, amount, 10000, email, success, error, {}, needsSecondPassword) 
+        wallet.updateLegacyAddresses() # Probably too early        
     }
         
   wallet.redeemFromEmailOrMobile = (account, claim, successCallback, error) ->
@@ -715,6 +716,18 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, $rootScope,
       
   wallet.isValidAddress = (address) ->
     return wallet.my.isValidAddress(address)
+    
+  wallet.isValidEmail = (candidate) ->
+    return false if candidate == ""
+    return false if candidate.indexOf("@") < 1
+    return false if candidate.indexOf(".") > candidate.length - 3
+    return true
+    
+  wallet.isValidMobile = (candidate) ->
+    return false if candidate == ""
+    return false if candidate[0] != "+"
+    return false if candidate.length < 6
+    return true
     
   wallet.archive = (address_or_account) ->
     if address_or_account.address?

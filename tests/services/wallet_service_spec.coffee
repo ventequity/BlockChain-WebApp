@@ -336,3 +336,19 @@ describe "walletServices", () ->
      
       expect(callbacks.needsBip38).toHaveBeenCalled()
       expect(callbacks.success).toHaveBeenCalled()
+      
+  describe "isValidEmail()", ->
+    it "should roughly check the address", ->
+      expect(Wallet.isValidEmail("")).toBe(false)      
+      expect(Wallet.isValidEmail("info")).toBe(false)
+      expect(Wallet.isValidEmail("blockchain.info")).toBe(false)
+      expect(Wallet.isValidEmail("@")).toBe(false)
+      expect(Wallet.isValidEmail("a@b.c")).toBe(false)
+      expect(Wallet.isValidEmail("info@blockchain.info")).toBe(true)
+      
+  describe "isValidMobile()", ->
+    it "should roughly check the number", ->
+      expect(Wallet.isValidMobile("")).toBe(false)
+      expect(Wallet.isValidMobile("+")).toBe(false)
+      expect(Wallet.isValidMobile("3111111111+")).toBe(false)
+      expect(Wallet.isValidMobile("+3111111111")).toBe(true)

@@ -29,12 +29,32 @@ describe "walletServices", () ->
       
       return
      
-    it "should call sendBitcoinsForAccount()", inject((Wallet, MyWallet) ->
+    it "should call sendBitcoinsForAccount() for a BTC address", inject((Wallet, MyWallet) ->
       spyOn(MyWallet,"sendBitcoinsForAccount")
             
       Wallet.transaction(mockObserver.success, mockObserver.error).send(Wallet.accounts[0], {address: "destination_address", type: "External"}, numeral("1.0"), "BTC")
       
       expect(MyWallet.sendBitcoinsForAccount).toHaveBeenCalled()
+      
+      return
+    )
+    
+    it "should call sendToEmail() for an email address", inject((Wallet, MyWallet) ->
+      spyOn(MyWallet,"sendToEmail")
+            
+      Wallet.transaction(mockObserver.success, mockObserver.error).send(Wallet.accounts[0], {address: "info@blockchain.com", type: "External"}, numeral("1.0"), "BTC")
+      
+      expect(MyWallet.sendToEmail).toHaveBeenCalled()
+      
+      return
+    )
+    
+    it "should call sendToMobile() for a mobile number", inject((Wallet, MyWallet) ->
+      spyOn(MyWallet,"sendToMobile")
+            
+      Wallet.transaction(mockObserver.success, mockObserver.error).send(Wallet.accounts[0], {address: "+1234567890", type: "External"}, numeral("1.0"), "BTC")
+      
+      expect(MyWallet.sendToMobile).toHaveBeenCalled()
       
       return
     )

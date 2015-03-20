@@ -281,8 +281,8 @@
       
       if $scope.transaction.destination == null  
       else if $scope.transaction.destination.type == "External"
-        if $scope.transaction.destination.address == ""
-        else if Wallet.isValidAddress($scope.transaction.destination.address)
+        if $scope.transaction.destination.address == "" ||  $scope.transaction.destination.address.length < 10
+        else if Wallet.isValidAddress($scope.transaction.destination.address) || Wallet.isValidEmail($scope.transaction.destination.address) || Wallet.isValidMobile($scope.transaction.destination.address)
           $scope.success.to = true
         else
           $translate("BITCOIN_ADDRESS_INVALID").then (translation) ->          
@@ -323,7 +323,7 @@
     return false if transaction.destination == null || (transaction.destination.type == "External" && transaction.destination.address == "")
         
     if transaction.destination.type == "External"
-      return false unless Wallet.isValidAddress(transaction.destination.address)
+      return false unless Wallet.isValidAddress(transaction.destination.address) || Wallet.isValidEmail(transaction.destination.address) || Wallet.isValidMobile(transaction.destination.address)
         
     return false if transaction.destination == transaction.from
     

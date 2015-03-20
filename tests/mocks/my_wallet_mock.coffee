@@ -436,7 +436,10 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     legacyAddresses[fromAddress].balance = 0
     return
     
-  myWallet.sendToEmail = (accountIdx, value, fixedFee, email, successCallback, errorCallback) ->
+  myWallet.sendToEmail = (accountIdx, value, fixedFee, mobile, successCallback, errorCallback, listener, getPassword) ->
+    successCallback()  
+    
+  myWallet.sendToMobile = (accountIdx, value, fixedFee, mobile, successCallback, errorCallback, listener, getPassword) ->
     successCallback()  
     
   myWallet.getBalanceForRedeemCode = (code, success, error) ->
