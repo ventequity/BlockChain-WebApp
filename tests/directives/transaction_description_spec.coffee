@@ -27,6 +27,7 @@ describe "Transaction Note Directive", ->
             hash: "tx_hash", confirmations: 13, intraWallet: null, 
             from: {account: {index: 0, amount: 300000000}, legacyAddresses: null, externalAddresses: null}, 
             to: {account: {index: 0, amount: 300000000}, legacyAddresses: null}
+            result: -300000000
           }
           
     return
@@ -81,38 +82,25 @@ describe "Transaction Note Directive", ->
 
   describe "send to email", ->
     beforeEach ->
-      isoScope.transaction.to_account = null
-      isoScope.transaction.to_addresses.push "temp_address"
-      
-      MyWallet.paidTo = {"tx_hash": {"email":"somebody@blockchain.com","mobile":null,"redeemedAt":null,"address":"temp_address"}}
+      isoScope.transaction.to.account = null
+      isoScope.transaction.to.email = {email:"somebody@blockchain.com","redeemedAt"}
       
       element = $compile(html)($rootScope)
       $rootScope.$digest()
       
     it "should be shown", ->
-      pending()
-      
       expect(element.html()).toContain 'somebody@blockchain.com'
-    
-    it "should show if not redeemed", -> 
-      pending()
-     
-      expect(element.html()).toContain 'translate="NOT_REDEEMED_YET"'
-    
-    it "should show redeemed date", ->  
-      pending()
-    
-      MyWallet.paidTo.redeemedAt = 1416832288
+      
+  describe "send to mobile", ->
+    beforeEach ->
+      isoScope.transaction.to.account = null
+      isoScope.transaction.to.mobile = {number:"+1234","redeemedAt"}
       
       element = $compile(html)($rootScope)
       $rootScope.$digest()
       
-      expect(element.html()).toContain 'translate="REDEEMED_AT"'
-      expect(element.html()).toContain '2014'
-
-  describe "send to mobile", ->
-    it "pending...", ->
-      pending()
+    it "should be shown", ->
+      expect(element.html()).toContain '+1234'
   
   return
   
