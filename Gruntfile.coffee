@@ -28,7 +28,7 @@ module.exports = (grunt) ->
         
       application_dependencies:
         src: [
-          'build/my_wallet.js' # This is just a wrapper around MyWallet
+          'build/wrappers/*.js' # Wrappers around MyWallet, MyWalletStore, etc
           'build/services/*.js'
           'build/controllers/*.js'
           'build/controllers/settings/*.js'
@@ -105,7 +105,7 @@ module.exports = (grunt) ->
         expand: true
         flatten: false
         cwd: "assets/js"
-        src: ["*.js.coffee", "controllers/**/*.js.coffee", "directives/**/*.js.coffee", "services/**/*.js.coffee"]
+        src: ["*.js.coffee", "wrappers/**/*.js.coffee", "controllers/**/*.js.coffee", "directives/**/*.js.coffee", "services/**/*.js.coffee"]
         dest: 'build'
         ext: ".js"
         

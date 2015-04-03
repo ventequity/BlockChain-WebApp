@@ -1,5 +1,5 @@
 walletServices = angular.module("myWalletServices", [])
-walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService, $cookieStore) ->
+walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService, $cookieStore, MyWalletStore) ->
   # Erase local storage:
   # localStorageService.remove("mockWallets")
 
@@ -18,6 +18,8 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
         accounts: [
           {label: "Savings", archived: false, balance: 300000000 - 25000000, receive_addresses: []},
           {label: "Mobile", archived: false, balance: 25000000 - 1500000, receive_addresses: ["13QsKpDMchnssikZEaJKdkTX7pycFEcTi1"]}
+          {label: "Old", archived: true, balance: 0, receive_addresses: []}
+       
         ]
         transactions: [
           {
@@ -86,14 +88,8 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
   myWallet = {}
   accounts = []
     
-  transactions = []
   notes = {}
-  legacyAddresses = []
-  
-  language = "en"
-  email = "steve@me.com"
-  mobile = "+31 12345678"
-  
+    
   defaultAccountIndex = 0
   
   feePolicy = 0
@@ -102,15 +98,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
   eventListener = undefined # Old system
   
   mockRules = {shouldFailToSend: false, shouldFailToCreateWallet: false}
-  
-  myWallet.addressBook = { # The same for everyone
-    "17gJCBiPBwY5x43DZMH3UJ7btHZs6oPAGq": "John"
-    "1LJuG6yvRh8zL9DQ2PTYjdNydipbSUQeq": "Alice"
-  }
-  
-  myWallet.getAddressBook = () ->
-    myWallet.addressBook
-  
+    
   mockRequestAddressStack = [ # Same for everyone
     "1Hj9XKGY6Fh8koVh6CuTJsQnuiSQrd9iCx"
     "1Bp85Lymp2ViRZwhbsD8NnDgRkEyai9w7i"
@@ -131,27 +119,12 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     "1Q57Pa6UQiDBeA3o5sQR1orCqfZzGA7Ddp"
   ]
   
-  myWallet.getLegacyAddressBalance = (address) ->
-    return legacyAddresses[address].balance
-    
-  myWallet.setLegacyAddressLabel = (label) ->
-    return
-  
   myWallet.setLabelForAccountAddress = (accountIdx, addressIdx, label) ->
     return
-    
-  myWallet.getTotalBalanceForActiveLegacyAddresses = () ->
-    tally = 0
-    for key, value of legacyAddresses
-      tally += value.balance
-    return tally
   
   myWallet.getHDWallet = () ->
     myWallet 
-    
-  myWallet.didUpgradeToHd = () ->
-    return true
-    
+        
   myWallet.isValidateBIP39Mnemonic = (mnemonic) ->
     return false unless mnemonic?
     return false if mnemonic.indexOf(" ") == -1
@@ -188,10 +161,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     else
       $log.error "Wallet not found"
       eventListener("wallet not found")
-      
-  myWallet.isMnemonicVerified = () ->
-    false
-    
+          
   myWallet.didVerifyMnemonic = () ->
       
   myWallet.getHistoryAndParseMultiAddressJSON = () ->
@@ -226,7 +196,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     eventListener("logging_out")
     myWallet.uid = undefined
     myWallet.password = undefined
-    transactions = []
+    MyWalletStore.setTransactions([])
     accounts = []
     if !(karma?) || !karma
       window.location = ""
@@ -239,59 +209,10 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     # wallets = localStorageService.get("mockWallets")
     # wallets[myWallet.uid].password = newPassword
     # localStorageService.set("mockWallets", wallets)
-      
-  myWallet.get_ticker = (success, fail) ->
-    success({
-      EUR: {"last": 250, symbol: "€"}
-      USD: {"last": 300, symbol: "$"}
-    })
- 
+       
   myWallet.getLanguage = () ->
     return language
-    
-    
-  myWallet.get_account_info = (callback) ->
-    callback({
-      email: email
-      email_verified: 1
-      sms_number: mobile
-      sms_verified: 0
-      password_hint1: "Same as username"
-      language: language
-      currency: "USD"
-      block_tor_ips: 0
-      my_ip: "123.456.789.012"
-    })
-    
-  myWallet.getLanguages = () ->
-    {de: "Deutch", en: "English", nl: "Nederlands"}
-    
-  myWallet.getCurrencies = () ->
-    {USD: "US Dollar", EUR: "Euro"}
-
-  myWallet.change_email = (newVal, success, error) ->
-    email = newVal
-    success()
-    
-  myWallet.changeMobileNumber = (newVal, success, error) ->
-    mobile = newVal
-    success()
-    
-  myWallet.verifyMobile = (code, success, error) ->
-    success()
-    
-  myWallet.update_password_hint1 = (value, success, fail) ->
-    success()
-    
-  myWallet.change_language = (newLanguage) ->
-    language = newLanguage
-    
-  myWallet.change_local_currency = (newCurrency) ->
-    currency = newCurrency
-    
-  myWallet.setIPWhitelist = (ips, success, error) ->
-    success()
-    
+        
   myWallet.getAccounts = () ->  
     theAccounts = []
     for i in [0..myWallet.getAccountsCount()]
@@ -317,14 +238,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     
   myWallet.setLabelForAccount = (idx, label) ->
     accounts[idx].label = label
-    
-  myWallet.getAllTransactions = (idx) ->
-    res = []
-    for transaction in transactions
-      res.push transaction
-    
-    return res
-    
+        
   myWallet.getNote = (hash) ->
     notes[hash]
     
@@ -369,7 +283,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     # MyWallet stores transaction locally (so it already knows it by the time
     # it receives the websocket notification).
 
-    transactions.push transaction
+    MyWalletStore.appendTransaction(transaction)
     accounts[fromAccountIndex].balance -= amount
     
     # Blockchain.info will know about these transactions:
@@ -399,7 +313,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
             to:   {account: {index: toAccountIdx, amount: amount}, legacyAddresses: null, externalAddresses: null}
           }
 
-    transactions.push transaction
+    MyWalletStore.appendTransaction(transaction)
     accounts[fromAccountIdx].balance -= amount
     accounts[toAccountIdx].balance += amount   
     
@@ -420,8 +334,8 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
               to:   {account: {index: toAccountIdx, amount: amount}, legacyAddresses: null, externalAddresses: null}
             }
 
-    transactions.push transaction
-    legacyAddresses[fromAddress].balance -= amount
+    MyWalletStore.appendTransaction(transaction)
+    MyWalletStore.setLegacyAddressBalance(fromAddress, MyWalletStore.getLegacyAddressBalance(fromAddress) - amount)
     accounts[toAccountIdx].balance += amount   
     
     success()
@@ -432,8 +346,8 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     success()
     
   myWallet.sweepLegacyAddressToAccount = (fromAddress, toAccountIndex, observer) ->
-    accounts[toAccountIndex].balance = legacyAddresses[fromAddress].balance
-    legacyAddresses[fromAddress].balance = 0
+    accounts[toAccountIndex].balance = MyWalletStore.getLegacyAddressBalance(fromAddress)
+    MyWalletStore.setLegacyAddressBalance(fromAddress, 0)
     return
     
   myWallet.sendToEmail = (accountIdx, value, fixedFee, mobile, successCallback, errorCallback, listener, getPassword) ->
@@ -494,52 +408,21 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     
   myWallet.recommendedTransactionFeeForAddress = () ->
     return 10000
-    
-  ####################
-  # Legacy addresses #
-  ####################
-  myWallet.getAllLegacyAddresses = () ->
-    res = []
-    for key, value of legacyAddresses
-      res.push key
-    return res
-    
-  myWallet.getLegacyActiveAddresses = () ->
-    activeAddresses = []
-    for key, value of legacyAddresses
-      unless value.archived
-        activeAddresses.push key
-    return activeAddresses
-    
-  myWallet.getLegacyAddressLabel = (address) ->
-    return legacyAddresses[address].label
-    
-  myWallet.isWatchOnlyLegacyAddress = (address) ->
-    return legacyAddresses[address].privateKey == null
-    
-  myWallet.archiveLegacyAddr = (address) ->
-    return
-  
-  myWallet.unArchiveLegacyAddr = (address) ->
-    return
-    
+        
   myWallet.archiveAccount = (account) ->
     return
   
   myWallet.unarchiveAccount = (account) ->
     return
     
-  myWallet.isArchivedForAccount = (account) ->
-    return false
-    
-  myWallet.deleteLegacyAddress = (address) ->
-    return
+  myWallet.isArchivedForAccount = (idx) ->
+    accounts[idx].archived
     
   myWallet.makePairingCode = () ->
     return ""
     
   myWallet.addWatchOnlyLegacyAddress = (address) ->
-    legacyAddresses[address] =  {privateKey: null, balance: 300000000}
+    MyWalletStore.addLegacyAddress(address, null, 300000000)
     return
     
   myWallet.isValidPrivateKey = (candidate) ->
@@ -565,15 +448,12 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
       )
     else    
       address = privateKey.replace("private_key_for_","")
-      legacyAddresses[address] =  {privateKey: privateKey, balance: 200000000}
+      MyWalletStore.addLegacyAddress(address, privateKey, 200000000)
       successCallback(address)
     
   myWallet.recoverMyWalletHDWalletFromMnemonic = (mnemonic, pwd) ->
     accounts.splice(0,accounts.length)
     accounts.push({name: "Account #0", balance: 0})
-      
-  myWallet.legacyAddressExists = (candidate) ->
-    return legacyAddresses[candidate]?
     
   myWallet.getLabeledReceivingAddressesForAccount = () ->
     return []
@@ -613,7 +493,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
         
       cookie[myWallet.uid].accounts = accounts
       cookie[myWallet.uid].notes = notes
-      cookie[myWallet.uid].legacyAddresses = legacyAddresses
+      cookie[myWallet.uid].legacyAddresses = MyWalletStore.getAllLegacyAddresses()
       
             
       localStorageService.set("mockWallets", cookie)
@@ -623,27 +503,19 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
   
   myWallet.refresh = () ->
     accounts = angular.copy(localStorageService.get("mockWallets")[this.uid].accounts)
-    transactions = angular.copy(localStorageService.get("mockWallets")[this.uid].transactions)
+    MyWalletStore.setTransactions(angular.copy(localStorageService.get("mockWallets")[this.uid].transactions))
     notes = angular.copy(localStorageService.get("mockWallets")[this.uid].notes)
-    legacyAddresses = angular.copy(localStorageService.get("mockWallets")[this.uid].legacyAddresses)
-    
-  myWallet.unsetTwoFactor = (success, error) ->
-    success()
-    
-  myWallet.setTwoFactorSMS = (success, error) ->
-    success()
-    
-  myWallet.setTwoFactorEmail = (success, error) ->
-    success()
-    
-  myWallet.setTwoFactorGoogleAuthenticator = (success, error) ->
-    success("google_secret")
-    
-  myWallet.confirmTwoFactorGoogleAuthenticator = (code, success, error) ->
-    if code == "123456"
-      success()
-    else
-      error()
+    for address, data of localStorageService.get("mockWallets")[this.uid].legacyAddresses
+      MyWalletStore.addLegacyAddress(address, data.privateKey, data.balance, data.label, data.archived)
+        
+  # myWallet.setTwoFactorGoogleAuthenticator = (success, error) ->
+  #   success("google_secret")
+  #
+  # myWallet.confirmTwoFactorGoogleAuthenticator = (code, success, error) ->
+  #   if code == "123456"
+  #     success()
+  #   else
+  #     error()
     
   myWallet.getFeePolicy = () ->
     return feePolicy
@@ -667,11 +539,10 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
   myWallet.setPbkdf2Iterations = (pbkdf2_iterations, success) ->
     success()
     
-  myWallet.update_tor_ip_block = (enabled, successCallback, errorCallback) ->
-    successCallback()
-    
   myWallet.setUseBuildHDWalletWebworker = (value) ->
     
+  myWallet.resendTwoFactorSms = (uid, success, error) ->
+    success()
     
   #####################################
   # Tell the mock to behave different # 
@@ -708,7 +579,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
           accounts[index].balance += transaction.result
           transaction.to = {account: {index: index, amount: transaction.result}, legacyAddresses: null, externalAddresses: null}
           
-          transactions.push transaction
+          MyWalletStore.appendTransaction(transaction)
           
           # Update the "blockchain" in our cookie:
           cookie = localStorageService.get("mockWallets")
