@@ -1,8 +1,9 @@
-@SendCtrl = ($scope, $log, Wallet, $modalInstance, ngAudio, $timeout, $state, $filter, $stateParams, $translate, paymentRequest) ->
+@SendCtrl = ($scope, $log, Wallet, $modalInstance, $timeout, $state, $filter, $stateParams, $translate, paymentRequest) ->
   $scope.legacyAddresses = Wallet.legacyAddresses
   $scope.accounts = Wallet.accounts
   $scope.addressBook = Wallet.addressBook
   $scope.status = Wallet.status
+  $scope.settings = Wallet.settings
   
   $scope.origins = []
   $scope.destinations = []  
@@ -14,8 +15,7 @@
   $scope.sending = false # Sending in progress
   
   # getUserMedia is not supported by Safari and IE. 
-  # It is supported but doesn't seem to work in Firefox ( navigator.mozGetUserMedia)
-  $scope.browserWithCamera = (navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.msGetUserMedia) != undefined
+  $scope.browserWithCamera = (navigator.getUserMedia || navigator.mozGetUserMedia ||  navigator.webkitGetUserMedia || navigator.msGetUserMedia) != undefined
     
   $scope.$watch "status.didLoadBalances + status.legacyAddressBalancesLoaded", ->
     if $scope.status.didLoadBalances && $scope.status.legacyAddressBalancesLoaded
@@ -23,6 +23,7 @@
         for account in $scope.accounts
           item = angular.copy(account)
           item.type = "Accounts" 
+          item.multiAccount = if item.index == 0 then false else true
           unless item.index? && !item.active
             $scope.origins.push item 
             $scope.destinations.push angular.copy(item) # https://github.com/angular-ui/ui-select/issues/656
@@ -31,6 +32,7 @@
           if address.active
             item = angular.copy(address)
             item.type = "Imported Addresses"
+            item.multiAccount = false
             $scope.destinations.push item
             unless address.isWatchOnlyLegacyAddress
               $scope.origins.push angular.copy(item)
@@ -38,6 +40,13 @@
         $scope.destinations.push({address: "", label: "", type: "External"})
         $scope.transaction.destination =  $scope.destinations.slice(-1)[0]
         $scope.originsLoaded = true
+        
+        $scope.errors.to = null
+        if paymentRequest.address?
+          $scope.applyPaymentRequest(paymentRequest)      
+        else if paymentRequest.toAccount?
+          $scope.transaction.destination = paymentRequest.toAccount
+          $scope.transaction.from = paymentRequest.fromAddress
         
     
   # for address, label of $scope.addressBook
@@ -64,19 +73,11 @@
         
   $scope.BTCtoFiat = (amount, currency) ->
     Wallet.BTCtoFiat(amount, currency)
-  
-  $scope.setMethod = (method) ->
-    $scope.method = method
-    
-    $scope.errors.to = null
-    if paymentRequest.address?
-      $scope.transaction.destination = paymentRequest.address
-    else if paymentRequest.toAccount?
-      $scope.transaction.destination = paymentRequest.toAccount
-      $scope.transaction.from = paymentRequest.fromAddress
       
-    return
-      
+  $scope.determineLabel = (origin) ->
+    label = origin.label || origin.address
+    return label
+
   $scope.maxAndLabelForSelect = (select) ->
     return "" unless select?
     return "" unless select.selected?
@@ -85,9 +86,10 @@
     
   $scope.maxAndLabel = (origin) ->
     
+    label = $scope.determineLabel(origin)
     
     if origin.balance == undefined
-      return origin.label
+      return label
     
     fees = Wallet.recommendedTransactionFee(origin, origin.balance)
 
@@ -96,9 +98,9 @@
     max_btc = numeral(0) if max_btc < 0
     
     if $scope.transaction.currency == "BTC"
-      return origin.label + " (" + max_btc.format("0.[00000000]") + " BTC)"  
+      return label + " (" + max_btc.format("0.[00000000]") + " BTC)"  
     else 
-      return origin.label + " (" + $scope.BTCtoFiat(max_btc, $scope.transaction.currency) + " " + $scope.transaction.currency + ")"
+      return label + " (" + $scope.BTCtoFiat(max_btc, $scope.transaction.currency) + " " + $scope.transaction.currency + ")"
   
   
   
@@ -112,9 +114,14 @@
     currencySelected: btc, 
     fee: 0
     note: ""
+    publicNote: false
   }
-    
-  $scope.setMethod("BTC")
+      
+  $scope.getFilter = (search) ->
+    filter =
+      label: search
+    filter.multiAccount = false if not $scope.settings.multiAccount
+    return filter
   
   $scope.hasZeroBalance = (origin) ->
     return origin.balance == 0.0
@@ -123,25 +130,32 @@
     # This never gets called...
     $translate("CAMERA_PERMISSION_DENIED").then (translation) ->
       Wallet.displayWarning(translation)
-    
-  $scope.processURLfromQR = (url) ->
-    paymentRequest = Wallet.parsePaymentRequest(url)
-    if paymentRequest.isValid
+  
+  $scope.applyPaymentRequest = (paymentRequest) ->
       $scope.transaction.destination = $scope.destinations.slice(-1)[0]
       $scope.transaction.destination.address = paymentRequest.address
       $scope.transaction.destination.label = paymentRequest.address  
       if paymentRequest.amount  
         $scope.transaction.amount = paymentRequest.amount 
-        $scope.transaction.currency = "BTC"
-        $scope.$digest()
-      
+        $scope.transaction.currency = "BTC"    
       
       $scope.cameraOff()
       $scope.visualValidate()
       $scope.transactionIsValid = $scope.validate()
       
       $scope.updateToLabel()
-      
+  
+  $scope.setMethod = (method) ->
+    $scope.method = method
+    return
+    
+  $scope.setMethod("BTC")
+    
+  $scope.processURLfromQR = (url) ->
+    paymentRequest = Wallet.parsePaymentRequest(url)
+    
+    if paymentRequest.isValid
+      $scope.applyPaymentRequest(paymentRequest)
     else
       $translate("QR_CODE_NOT_BITCOIN").then (translation) ->
         Wallet.displayWarning(translation)
@@ -151,7 +165,7 @@
       $timeout((->
         $scope.lookForQR()
       ), 2000)
-     
+         
   $scope.cameraOn = () ->
     $scope.cameraRequested = true
     
@@ -167,6 +181,11 @@
   $scope.send = () ->
     unless $scope.sending
       $scope.sending = true
+
+      if $scope.transaction.publicNote
+        publicNote = $scope.transaction.note
+        if publicNote == ""
+          publicNote = null
     
       transactionDidFailWithError = (message) ->
         if message
@@ -174,14 +193,16 @@
         $scope.sending = false
       
       transactionDidFinish = (tx_hash) ->
-        # Save note, if any:
-        note = $scope.transaction.note.trim()
-        if note != ""
-          Wallet.setNote({hash: tx_hash}, note)
-        
+        if not $scope.transaction.publicNote
+          # Save private note, if any:
+          note = $scope.transaction.note.trim()
+          if note != ""
+            Wallet.setNote({hash: tx_hash}, note)          
+
         $scope.sending = false
-        sound = ngAudio.load("beep.wav")
-        sound.play()
+        
+        Wallet.beep()
+        
         $modalInstance.close ""
         if $scope.transaction.from.index?
           $state.go("wallet.common.transactions", {accountIndex: $scope.transaction.from.index })
@@ -190,7 +211,7 @@
           
       Wallet.clearAlerts()
   
-      Wallet.transaction(transactionDidFinish, transactionDidFailWithError).send($scope.transaction.from, $scope.transaction.destination, numeral($scope.transaction.amount), $scope.transaction.currency)
+      Wallet.transaction(transactionDidFinish, transactionDidFailWithError).send($scope.transaction.from, $scope.transaction.destination, numeral($scope.transaction.amount), $scope.transaction.currency, publicNote)
       return
 
   $scope.closeAlert = (alert) ->

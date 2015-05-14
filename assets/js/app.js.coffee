@@ -16,6 +16,7 @@ modules = [
   # TODO get rid of these wrappers and modify the original files to work with injection?
   "myWalletServices" 
   "myWalletStoreServices"
+  "myWalletSpenderServices"
   "myBlockchainApiServices"
   "myBlockchainSettingsServices"
   
@@ -88,6 +89,7 @@ modules = [
   "templates/verify-email.jade"
   "templates/resend-email-confirmation.jade"
   "templates/adverts.jade"
+  "templates/multi-account.jade"
   # 'angular-ladda'
 ]
 

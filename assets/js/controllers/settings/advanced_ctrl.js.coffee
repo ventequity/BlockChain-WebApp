@@ -3,6 +3,7 @@
   $scope.processToggleRememberTwoFactor = null
   $scope.errors = 
     ipWhitelist: null
+  $scope.display = {dev: false}
     
   $scope.validatePbkdf2 = (candidate) ->
     n = parseInt(candidate)
@@ -11,8 +12,10 @@
     
   $scope.validateIpWhitelist = (candidates) ->
     $scope.errors.ipWhitelist = null
+      
+    return false unless candidates? 
+    return true if candidates == ""
     
-    return false unless candidates? && candidates != ""
     if candidates.length > 255
       $translate("MAX_CHARACTERS", {max: 255}).then (translation) ->
         $scope.errors.ipWhitelist = translation
@@ -45,6 +48,13 @@
       
     Wallet.setPbkdf2Iterations(n, success, error)
     
+  $scope.changeLogoutTime = (s, success, errorCallback) ->
+    error = () ->
+      Wallet.displayError("Failed to update auto logout time")
+      errorCallback()
+
+    Wallet.setLogoutTime(s, success, error)
+
   $scope.changeIpWhitelist = (list, success, errorCallback) ->
     error = () ->
       Wallet.displayError("Failed to update IP whitelist")

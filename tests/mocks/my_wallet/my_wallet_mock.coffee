@@ -83,20 +83,9 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
             
   uid = undefined
   
-  isSynchronizedWithServer = true # In the sense that the server is up to date
-  
   myWallet = {}
   accounts = []
-    
-  notes = {}
-    
-  defaultAccountIndex = 0
-  
-  feePolicy = 0
-
-  monitorFunc = undefined  # New system
-  eventListener = undefined # Old system
-  
+          
   mockRules = {shouldFailToSend: false, shouldFailToCreateWallet: false}
     
   mockRequestAddressStack = [ # Same for everyone
@@ -137,7 +126,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
   myWallet.fetchWalletJson = (uid, dummy1, dummy2, password, two_factor_code, success, needs_2fa, wrong_2fa) ->
     if wallet = localStorageService.get("mockWallets")[uid]
       myWallet.uid = uid
-      eventListener("did_set_guid")
+      MyWalletStore.sendEvent("did_set_guid")
       
       if wallet.two_factor
         if two_factor_code
@@ -151,23 +140,23 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
         monitorFunc({type: "error", message: "Wrong password", code: 0});
         return
       
-      myWallet.password = password
+      MyWalletStore.mockSetPassword(password)
     
     
       success()
-      eventListener("on_wallet_decrypt_finish")
+      MyWalletStore.sendEvent("on_wallet_decrypt_finish")
       return
 
     else
       $log.error "Wallet not found"
-      eventListener("wallet not found")
+      MyWalletStore.sendEvent("wallet not found")
           
   myWallet.didVerifyMnemonic = () ->
       
   myWallet.getHistoryAndParseMultiAddressJSON = () ->
     this.refresh()
-    eventListener("did_multiaddr")
-    eventListener("hd_wallet_set")
+    MyWalletStore.sendEvent("did_multiaddr")
+    MyWalletStore.sendEvent("hd_wallet_set")
       
   myWallet.createNewWallet = (email, pwd, language, currency, success, fail) ->
     uid = String(Math.floor((Math.random() * 100000000) + 1))
@@ -193,22 +182,13 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
       success(uid)
   
   myWallet.logout = () ->
-    eventListener("logging_out")
+    MyWalletStore.sendEvent("logging_out")
     myWallet.uid = undefined
     myWallet.password = undefined
     MyWalletStore.setTransactions([])
     accounts = []
     if !(karma?) || !karma
       window.location = ""
-      
-  myWallet.isCorrectMainPassword = (candidate) ->
-    return candidate == myWallet.password
-    
-  myWallet.changePassword = (newPassword) ->
-    myWallet.password = newPassword
-    # wallets = localStorageService.get("mockWallets")
-    # wallets[myWallet.uid].password = newPassword
-    # localStorageService.set("mockWallets", wallets)
        
   myWallet.getLanguage = () ->
     return language
@@ -238,109 +218,6 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     
   myWallet.setLabelForAccount = (idx, label) ->
     accounts[idx].label = label
-        
-  myWallet.getNote = (hash) ->
-    notes[hash]
-    
-  myWallet.setNote = (hash, text) ->
-    notes[hash] = text
-    myWallet.sync()
-    return
-    
-  # Amount in Satoshi
-  myWallet.sendBitcoinsForAccount = (fromAccountIndex,toAddress, amount, fee, note, success, error) ->
-    if mockRules.shouldFailToSend
-      error({message: "Reason for failure"})
-      return
-      
-    # A few sanity checks (not complete)
-    if amount > accounts[fromAccountIndex].balance
-      error({message: "Insufficient funds"})
-      return
-    
-    ###
-    The MyWallet mock parses transactions by just copying them, so the following 
-    transaction is what a real transaction would look like  *after* processing. 
-    
-    The real transaction may have several inputs (from receiving and change address 
-    for this account). A new change address may need to be generated.
-    
-    Transaction parsing should be able to figure out which account was the sender and 
-    change address and which address represents a recipient.
-    ###
-    
-    transaction = {
-            hash: "hash-" + (new Date()).getTime(), 
-            confirmations: 0
-            doubleSpend: false
-            intraWallet: false, 
-            note: null, 
-            txTime: (new Date()).getTime()
-            from: {account: {index: fromAccountIndex, amount: amount}, legacyAddresses: null, externalAddresses: null}, 
-            to: {account: null, legacyAddresses: null, externalAddresses: {addressWithLargestOutput: toAddress, amount: amount}}
-          }
-    
-    # MyWallet stores transaction locally (so it already knows it by the time
-    # it receives the websocket notification).
-
-    MyWalletStore.appendTransaction(transaction)
-    accounts[fromAccountIndex].balance -= amount
-    
-    # Blockchain.info will know about these transactions:
-    cookie = localStorageService.get("mockWallets")
-    cookie[this.uid].accounts[fromAccountIndex].balance -= amount
-    cookie[this.uid].transactions.push transaction
-    localStorageService.set("mockWallets", cookie)
-    
-    success()
-    
-    return
-  
-  myWallet.sendToAccount = (fromAccountIdx, toAccountIdx, amount, feeAmount, note, success, error, getPassword) ->
-    # A few sanity checks (not complete)
-    if amount > accounts[fromAccountIdx].balance
-      error({message: "Insufficient funds"})
-      return
-    
-    transaction = {
-            hash: "hash-" + (new Date()).getTime(), 
-            confirmations: 0
-            doubleSpend: false
-            intraWallet: true, 
-            note: null, 
-            txTime: (new Date()).getTime()
-            from: {account: {index: fromAccountIdx, amount: amount}, legacyAddresses: null, externalAddresses: null}, 
-            to:   {account: {index: toAccountIdx, amount: amount}, legacyAddresses: null, externalAddresses: null}
-          }
-
-    MyWalletStore.appendTransaction(transaction)
-    accounts[fromAccountIdx].balance -= amount
-    accounts[toAccountIdx].balance += amount   
-    
-    success()
-    
-    return
-     
-  
-  myWallet.sendFromLegacyAddressToAccount = (fromAddress, toAccountIdx, amount, feeAmount, note, success, error, getPassword) ->
-    transaction = {
-              hash: "hash-" + (new Date()).getTime(), 
-              confirmations: 0
-              doubleSpend: false
-              intraWallet: true, 
-              note: null, 
-              txTime: (new Date()).getTime()
-              from: {account: null, legacyAddresses: [{address: fromAddress, amount: amount}], externalAddresses: null}, 
-              to:   {account: {index: toAccountIdx, amount: amount}, legacyAddresses: null, externalAddresses: null}
-            }
-
-    MyWalletStore.appendTransaction(transaction)
-    MyWalletStore.setLegacyAddressBalance(fromAddress, MyWalletStore.getLegacyAddressBalance(fromAddress) - amount)
-    accounts[toAccountIdx].balance += amount   
-    
-    success()
-    
-    return
     
   myWallet.upgradeToHDWallet = (needsPassword, success, error) ->
     success()
@@ -390,18 +267,12 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
     account = {}
     
     return account
-  
-  myWallet.addEventListener = (func) ->
-    eventListener = func
-    
+      
   myWallet.monitor = (func) ->
     monitorFunc = func
     
   # Pending refactoring of MyWallet:
   $window.symbol_local = {code: "USD",conversion: 250000.001, local: true, name: "Dollar", symbol: "$", symbolAppearsAfter: false}
-    
-  myWallet.isSynchronizedWithServer = () ->
-    return isSynchronizedWithServer
     
   myWallet.recommendedTransactionFeeForAccount = () ->
     return 10000
@@ -461,13 +332,6 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
   myWallet.getFiatAtTime = (time, value, currencyCode, successCallback, errorCallback) ->
     successCallback(3.2)
     
-  myWallet.getDefaultAccountIndex = () ->
-    return defaultAccountIndex
-    
-  myWallet.setDefaultAccountIndex = (idx) ->
-    defaultAccountIndex = idx
-    return
-    
   ############################################################
   # Simulate spontanuous behavior when using mock in browser #
   ############################################################
@@ -478,7 +342,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
   ###################################
   
   myWallet.sync = () ->
-    isSynchronizedWithServer = false
+    MyWalletStore.setIsSynchronizedWithServer(false)
     
     if myWallet.pendingSync != undefined
       $timeout.cancel(myWallet.pendingSync)
@@ -492,19 +356,19 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
         return 
         
       cookie[myWallet.uid].accounts = accounts
-      cookie[myWallet.uid].notes = notes
+      cookie[myWallet.uid].notes = MyWalletStore.getNotes()
       cookie[myWallet.uid].legacyAddresses = MyWalletStore.getAllLegacyAddresses()
       
             
       localStorageService.set("mockWallets", cookie)
-      isSynchronizedWithServer = true
+      MyWalletStore.setIsSynchronizedWithServer(true)
     ), 5000)
     
   
   myWallet.refresh = () ->
     accounts = angular.copy(localStorageService.get("mockWallets")[this.uid].accounts)
     MyWalletStore.setTransactions(angular.copy(localStorageService.get("mockWallets")[this.uid].transactions))
-    notes = angular.copy(localStorageService.get("mockWallets")[this.uid].notes)
+    MyWalletStore.setNotes(angular.copy(localStorageService.get("mockWallets")[this.uid].notes))
     for address, data of localStorageService.get("mockWallets")[this.uid].legacyAddresses
       MyWalletStore.addLegacyAddress(address, data.privateKey, data.balance, data.label, data.archived)
         
@@ -516,34 +380,22 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
   #     success()
   #   else
   #     error()
-    
-  myWallet.getFeePolicy = () ->
-    return feePolicy
-    
-  myWallet.setFeePolicy = (policy) ->
-    feePolicy = policy
-    return
-    
-  myWallet.getDoubleEncryption = () ->
-    return false
-    
+        
   myWallet.setSecondPassword = (password, success, error) ->
     success()
     
   myWallet.unsetSecondPassword = (success, error) ->
     success()
     
-  myWallet.getPbkdf2Iterations = () ->
-    10
-    
   myWallet.setPbkdf2Iterations = (pbkdf2_iterations, success) ->
+    WalletStore.setPbkdf2Iterations(pbkdf2_iterations)
     success()
     
   myWallet.setUseBuildHDWalletWebworker = (value) ->
     
   myWallet.resendTwoFactorSms = (uid, success, error) ->
     success()
-    
+            
   #####################################
   # Tell the mock to behave different # 
   #####################################
@@ -567,7 +419,7 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
    
     # this.mockProcessNewTransaction { amount: amount, confirmations: 0, doubleSpend: false, coinbase: false, intraWallet: false, from_account: null, from_addresses: [from], to: address , note: note, txTime: }
     
-    eventListener("on_tx")
+    MyWalletStore.sendEvent("on_tx")
     
   myWallet.mockProcessNewTransaction = (transaction) ->  
     
@@ -590,6 +442,6 @@ walletServices.factory "MyWallet", ($window, $timeout, $log, localStorageService
           break
 
   myWallet.mockShouldReceiveNewBlock = () ->
-    eventListener("on_block")
+    MyWalletStore.sendEvent("on_block")
   
   return myWallet 

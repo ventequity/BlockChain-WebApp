@@ -17,12 +17,15 @@
    
   currency_guess =  $filter("getByProperty")("code", "USD", Wallet.currencies)
 
-  $scope.fields = {email: "", password: "", confirmation: "", language: language_guess, currency: currency_guess, mnemonic: "", emailVerificationCode: ""}
+  $scope.fields = {email: "", password: "", confirmation: "", language: language_guess, currency: currency_guess, mnemonic: "", bip39phrase: "", emailVerificationCode: ""}
   $scope.errors = {emailVerificationCode: null}
 
   $scope.didLoad = () ->    
     if Wallet.status.isLoggedIn && !Wallet.status.didVerifyEmail
       $scope.currentStep = 4
+      
+     if $scope.beta 
+       $scope.fields.email = $scope.beta.email
       
   $scope.didLoad()
   
@@ -41,7 +44,7 @@
   
     $scope.working = true
   
-    Wallet.importWithMnemonic($scope.fields.mnemonic, success, error)      
+    Wallet.importWithMnemonic($scope.fields.mnemonic, $scope.fields.bip39phrase, success, error)      
     
     return
     
@@ -95,7 +98,7 @@
       
   $scope.createWallet = (successCallback) ->
     Wallet.create($scope.fields.password, $scope.fields.email, $scope.fields.language, $scope.fields.currency, (uid)->
-        successCallback()        
+      successCallback()        
     )
     
   $scope.resendEmail = () ->
@@ -129,7 +132,7 @@
       $scope.isValid[0] = false
       $translate("EMAIL_ADDRESS_REQUIRED").then (translation) ->
         $scope.errors.email = translation
-    else if $scope.form.$error.email
+    else if $scope.form && $scope.form.$error.email
       $scope.isValid[0] = false
       $translate("EMAIL_ADDRESS_INVALID").then (translation) ->
         $scope.errors.email = translation

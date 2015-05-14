@@ -19,7 +19,7 @@ playSound = (id) ->
 ##################################
 
 walletServices = angular.module("walletServices", [])
-walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchainApi, MyBlockchainSettings, MyWalletStore, $rootScope, ngAudio, $cookieStore, $translate, $filter, $state, $q) -> 
+walletServices.factory "Wallet", ($log, $http, $window, $timeout, MyWallet, MyBlockchainApi, MyBlockchainSettings, MyWalletStore, MyWalletSpender, $rootScope, ngAudio, $cookieStore, $translate, $filter, $state, $q) -> 
   wallet = {
     goal: {}, 
     status: {isLoggedIn: false, didUpgradeToHd: null, didInitializeHD: false, didLoadTransactions: false, didLoadBalances: false, legacyAddressBalancesLoaded: false, didConfirmRecoveryPhrase: false}, 
@@ -39,6 +39,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
   wallet.my = MyWallet
   wallet.settings_api = MyBlockchainSettings
   wallet.store = MyWalletStore
+  wallet.spender = MyWalletSpender
   wallet.api = MyBlockchainApi
   wallet.transactions = []
   wallet.languages = []
@@ -61,8 +62,10 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
       if wallet.store.didUpgradeToHd()
         wallet.updateAccounts()
       
-      wallet.settings.secondPassword = wallet.my.getDoubleEncryption()
-      wallet.settings.pbkdf2 = wallet.my.getPbkdf2Iterations()    
+      wallet.settings.secondPassword = wallet.store.getDoubleEncryption()
+      wallet.settings.pbkdf2 = wallet.store.getPbkdf2Iterations()    
+      wallet.settings.multiAccount = wallet.store.getMultiAccountSetting()
+      wallet.settings.logoutTimeSeconds = wallet.store.getLogoutTime() / 60000
             
       # Get email address, etc
       # console.log "Getting info..."
@@ -96,7 +99,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
         
         wallet.settings.displayCurrency = wallet.settings.currency
       
-        wallet.settings.feePolicy = wallet.my.getFeePolicy()
+        wallet.settings.feePolicy = wallet.store.getFeePolicy()
       
         wallet.settings.blockTOR = !!result.block_tor_ips
       
@@ -152,10 +155,46 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
       wallet.displayWarning("Please check your email to approve this login attempt.", true)
       wallet.applyIfNeeded()
       
-    $window.root = "https://blockchain.info/"   
-    wallet.my.fetchWalletJson(uid, null, null, password, two_factor_code, didLogin, needsTwoFactorCode, wrongTwoFactorCode, authorizationRequired, loginError ) 
+    betaCheckFinished = () ->
+      $window.root = "https://blockchain.info/"   
+      #                         , shared_key, resend_code, inputedPassword, twoFACode,       success,  needs_two_factor_code, wrong_two_factor_code, authorization_required, other_error, fetch_success, decrypt_success, build_hd_success
+      wallet.my.fetchWalletJson(
+        uid,      
+        null,       # shared_key
+        null,       # resend_code
+        password,        
+        two_factor_code, 
+        didLogin, 
+        needsTwoFactorCode,    
+        wrongTwoFactorCode,    
+        authorizationRequired,  
+        loginError,  # other_error
+        () -> return,     # fetch_success
+        () -> return,     # decrypt_success
+        () -> return      # build_hd_success
+      )
     
-    wallet.fetchExchangeRate()
+      wallet.fetchExchangeRate()
+      return
+      
+    # If BETA=1 is set in .env then in index.html/jade $rootScope.beta is set.
+    # The following checks are not ideal as they can be bypassed with some creative Javascript commands.
+    if $rootScope.beta
+      # Check if there is an invite code associated with
+      $http.post("/check_guid_for_beta_key", {guid: uid}
+      ).success((data) ->
+        if(data.verified) 
+          betaCheckFinished()
+        else
+          if(data.error && data.error.message)
+            wallet.displayError(data.error.message)
+          errorCallback()
+      ).error () ->
+        wallet.displayError("Unable to verify your wallet UID.")
+        errorCallback()
+        
+    else
+      betaCheckFinished()
   
   wallet.resendTwoFactorSms = (uid, successCallback, errorCallback) ->
     success = () ->
@@ -165,7 +204,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
       successCallback()
       wallet.applyIfNeeded()
       
-    error = () ->
+    error = (e) ->
       $translate("RESENT_2FA_SMS_FAILED").then (translation) ->
         wallet.displayError(translation)
       errorCallback()
@@ -183,8 +222,20 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
       loginError = (error) ->
         console.log(error)
         wallet.displayError("Unable to login to new wallet")
-      
-      wallet.login(uid, password, null, null, loginSuccess, loginError)
+        
+      # Associate the UID with the beta key:
+      if $rootScope.beta
+        $http.post("/set_guid_for_beta_key", {key: $rootScope.beta.key, guid: uid}
+        ).success((data) ->
+          if(data.success) 
+            wallet.login(uid, password, null, null, loginSuccess, loginError)   
+          else
+            if(data.error && data.error.message)
+              Wallet.displayError(data.error.message)
+        ).error () ->
+          Wallet.displayWarning("Unable to associate your new wallet with your invite code. Please try to login using your UID " + uid + " or register again.", true)  
+      else
+        wallet.login(uid, password, null, null, loginSuccess, loginError)
     
     error = (error) ->
       if error.message != undefined
@@ -230,9 +281,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
     
   wallet.addAddressForAccount = (account, successCallback, errorCallback) ->        
     labeledReceivingAddresses = wallet.my.getLabeledReceivingAddressesForAccount(account.index)
-            
-    # Add a new address rather than reuse the first one if no labeled addresses exist. This requires
-    # labeling the first address as well.
+    # Add a new address rather than reuse the first one if no labeled addresses exist.
     if labeledReceivingAddresses.length == 0
       firstAvailableReceivingAddressIdx = wallet.my.getReceivingAddressIndexForAccount(account.index)
             
@@ -290,7 +339,8 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
   wallet.logout = () ->
     wallet.didLogoutByChoice = true
     $window.name = "blockchain"
-    wallet.my.logout() # broadcast "logging_out"
+    wallet.my.logout(true)
+    return
     
   wallet.makePairingCode = (successCallback, errorCallback) ->
     success = (code) ->
@@ -308,14 +358,14 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
     wallet.status.didConfirmRecoveryPhrase = true
 
   wallet.isCorrectMainPassword = (candidate) ->
-    wallet.my.isCorrectMainPassword(candidate)
+    wallet.store.isCorrectMainPassword(candidate)
     
   wallet.isCorrectSecondPassword = (candidate) ->
     return true
     # wallet.my.isCorrectSecondPassword(candidate)
     
   wallet.changePassword = (newPassword) ->
-    wallet.my.changePassword(newPassword, (()-> 
+    wallet.store.changePassword(newPassword, (()-> 
       $translate("CHANGE_PASSWORD_SUCCESS").then (translation) ->
         wallet.displaySuccess(translation)
     ),() ->
@@ -360,7 +410,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
       $rootScope.$broadcast "requireSecondPassword", continueCallback, cancelCallback
     
     success = () ->
-      wallet.settings.pbkdf2 = wallet.my.getPbkdf2Iterations()
+      wallet.settings.pbkdf2 = wallet.store.getPbkdf2Iterations()
       successCallback()
       
     error = (error) ->
@@ -536,32 +586,30 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
         
       $rootScope.$broadcast "requireSecondPassword", continueCallback, cancelCallback
       
-    {  
-      send: (from, destination, amount, currency) ->
+    {
+      send: (from, destination, amount, currency, publicNote) ->
         amount = wallet.checkAndGetTransactionAmount(amount, currency, success, error)
-    
+        
+        spender = wallet.spender(publicNote, success, error, {}, needsSecondPassword)
+
         if from.address?
-          if destination.index?
-            console.log "Send from legacy to account"
-            console.log from.address
-            console.log destination.index
-            wallet.my.sendFromLegacyAddressToAccount(from.address, destination.index, amount, 10000, null, success, error, {},needsSecondPassword)
-          else if destination.address?
-            wallet.my.sendFromLegacyAddressToAddress(from.address, destination.address, amount, 10000, null, success, error, {},needsSecondPassword)
+          spendFrom = spender.fromAddress(from.address, amount, 10000)
         else if from.index?
-          if destination.index?
-            wallet.my.sendToAccount(from.index, destination.index, amount, 10000, null, success, error, {}, needsSecondPassword)
-          else if destination.address?
-            if wallet.isValidEmail(destination.address)
-              wallet.my.sendToEmail(from.index, amount, 10000, destination.address, success, error, {}, needsSecondPassword)
-            else if wallet.isValidMobile(destination.address)
-              wallet.my.sendToMobile(from.index, amount, 10000, destination.address, success, error, {}, needsSecondPassword)
-            else
-              wallet.my.sendBitcoinsForAccount(from.index, destination.address, amount, 10000, null, success, error, {}, needsSecondPassword)
-    
-      sweepLegacyAddressToAccount: (fromAddress, toAccountIndex) ->
-        wallet.my.sweepLegacyAddressToAccount(fromAddress.address, toAccountIndex, success, error, {}, needsSecondPassword)
-        wallet.updateLegacyAddresses() # Probably too early        
+          spendFrom = spender.fromAccount(from.index, amount, 10000)
+
+        if destination.index?
+          spendFrom.toAccount(destination.index)
+        else if destination.address?
+          if wallet.isValidEmail(destination.address)
+            spendFrom.toEmail(destination.address)
+          else if wallet.isValidMobile(destination.address)
+            spendFrom.toMobile(destination.address)
+          else
+            spendFrom.toAddress(destination.address)
+          
+      sweep: (fromAddress, toAccountIndex) ->
+        spender = wallet.spender(null, success, error, {}, needsSecondPassword)
+        spender.addressSweep(fromAddress.address).toAccount(toAccountIndex)
     }
         
   wallet.redeemFromEmailOrMobile = (account, claim, successCallback, error) ->
@@ -592,8 +640,8 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
       cancelCallback = () ->
       $rootScope.$broadcast "requireSecondPassword", continueCallback, cancelCallback
     
-    success = (mnemonic) ->
-      successCallback(mnemonic)
+    success = (mnemonic, passphrase) ->
+      successCallback(mnemonic, passphrase)
     
     error = () ->
       wallet.my.displayError("Unable to show mnemonic.")
@@ -601,7 +649,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
   
     wallet.my.getHDWalletPassphraseString(needsSecondPasswordCallback, success, error)
     
-  wallet.importWithMnemonic = (mnemonic, successCallback, errorCallback) ->
+  wallet.importWithMnemonic = (mnemonic, passphrase, successCallback, errorCallback) ->
     needsSecondPasswordCallback = (continueCallback) ->
       cancelCallback = () ->
       $rootScope.$broadcast "requireSecondPassword", continueCallback, cancelCallback
@@ -617,11 +665,11 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
       successCallback()
           
     $timeout((->
-      wallet.my.recoverMyWalletHDWalletFromMnemonic(mnemonic, null, needsSecondPasswordCallback, success, errorCallback)    
+      wallet.my.recoverMyWalletHDWalletFromMnemonic(mnemonic, passphrase, needsSecondPasswordCallback, success, errorCallback)    
     ), 100)  
             
   wallet.getDefaultAccountIndex = () ->
-    wallet.my.getDefaultAccountIndex()
+    wallet.store.getDefaultAccountIndex()
     
   wallet.getReceivingAddressForAccount = (idx) ->
     wallet.my.getReceivingAddressForAccount(idx)
@@ -712,7 +760,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
 
     
   wallet.isSynchronizedWithServer = () ->
-    return wallet.my.isSynchronizedWithServer()
+    return wallet.store.isSynchronizedWithServer()
 
   window.onbeforeunload = (event) -> 
     if !wallet.isSynchronizedWithServer()
@@ -782,7 +830,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
     numberOfOldAccounts = wallet.accounts.length
     numberOfNewAccounts = wallet.my.getAccountsCount()
         
-    defaultAccountIndex = wallet.my.getDefaultAccountIndex()
+    defaultAccountIndex = wallet.store.getDefaultAccountIndex()
         
     if numberOfNewAccounts > 0
       for i in [0..(numberOfNewAccounts - 1)]
@@ -803,7 +851,9 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
     for account in wallet.accounts
       continue if !account.active
       labeledAddresses = wallet.my.getLabeledReceivingAddressesForAccount(account.index)
+            
       for address in labeledAddresses
+        address.address = wallet.my.getReceiveAddressAtIndexForAccount(account.index, address.index)
         hdAddress = $filter("getByProperty")("address", address.address, wallet.hdAddresses)
         if hdAddress == null
           wallet.hdAddresses.push {
@@ -884,12 +934,12 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
         if candidate.hash == tx.hash
           match = true
           if !candidate.note?
-            candidate.note = wallet.my.getNote(tx.hash) # In case a note was just set
+            candidate.note = wallet.store.getNote(tx.hash) # In case a note was just set
           break
     
       if !match
         transaction = angular.copy(tx)
-        transaction.note = wallet.my.getNote(transaction.hash)
+        transaction.note = wallet.store.getNote(transaction.hash)
           
         wallet.transactions.push transaction 
     wallet.status.didLoadTransactions = true
@@ -907,22 +957,25 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
 
      if !match
        transaction = angular.copy(tx)
-       transaction.note = wallet.my.getNote(transaction.hash)
+       transaction.note = wallet.store.getNote(transaction.hash)
     
        wallet.transactions.push transaction   
           
   ####################
   # Notification     #
   ####################
+  
+  wallet.beep = () ->
+    sound = ngAudio.load("beep.wav")
+    sound.play()
             
   wallet.monitor = (event, data) ->
     # console.log event
     if event == "on_tx" or event == "on_block"
       before = wallet.transactions.length
       wallet.updateTransactions()
-      if wallet.transactions.length > before        
-        sound = ngAudio.load("beep.wav")
-        sound.play()
+      if wallet.transactions.length > before  
+        wallet.beep()      
         wallet.updateAccountsAndLegacyAddresses()
     else if event == "error_restoring_wallet"
       # wallet.applyIfNeeded()
@@ -961,10 +1014,6 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
       
     else if event == "did_multiaddr" # Transactions loaded
       wallet.updateTransactions()
-      wallet.updateAccountsAndLegacyAddresses()  
-      wallet.applyIfNeeded()
-      
-    else if event == "hd_wallet_balance_updated"
       wallet.updateAccountsAndLegacyAddresses()  
       wallet.applyIfNeeded()
     else if event == "did_update_legacy_address_balance"
@@ -1014,7 +1063,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
     else
       # console.log event
 
-  wallet.my.addEventListener((event, data) -> wallet.monitor(event, data))
+  wallet.store.addEventListener((event, data) -> wallet.monitor(event, data))
 
   message = $cookieStore.get("alert-warning")
   if message != undefined && message != null
@@ -1030,15 +1079,25 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
   # Notes and tags #
   ##################
   wallet.setNote = (tx, text) ->
-    wallet.my.setNote(tx.hash, text)
+    wallet.store.setNote(tx.hash, text)
     
   wallet.deleteNote = (tx) ->
-    wallet.my.deleteNote(tx.hash)
+    wallet.store.deleteNote(tx.hash)
 
   ############
   # Settings #
   ############
   
+  wallet.setMultiAccount = (flag) ->
+    wallet.store.setMultiAccountSetting(flag)
+    wallet.settings.multiAccount = flag
+  
+  wallet.setLogoutTime = (s, success, error) ->
+    wallet.store.setLogoutTime(s * 60000)
+    wallet.settings.logoutTimeSeconds = s
+    wallet.my.backupWalletDelayed()
+    success()
+
   wallet.getLanguages = () ->
     # Get and sort languages:
     tempLanguages = []
@@ -1089,7 +1148,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
     )
     
   wallet.setFeePolicy = (policy) ->
-    wallet.my.setFeePolicy(policy)
+    wallet.store.setFeePolicy(policy)
     wallet.settings.feePolicy = policy  
   
   wallet.fetchExchangeRate = () ->
@@ -1189,6 +1248,19 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
     ,()->
       console.log "Failed"
       wallet.applyIfNeeded()
+    )
+    
+  wallet.setTwoFactorYubiKey = (code) ->
+    wallet.settings_api.setTwoFactorYubiKey(
+      code
+      ()->
+        wallet.settings.needs2FA = true
+        wallet.settings.twoFactorMethod = 3
+        wallet.applyIfNeeded()
+      (error)->
+        console.log(error)
+        wallet.displayError(error)
+        wallet.applyIfNeeded()
     )
   
   wallet.setTwoFactorGoogleAuthenticator = () ->
@@ -1296,7 +1368,7 @@ walletServices.factory "Wallet", ($log, $window, $timeout, MyWallet, MyBlockchai
     return wallet.store.getTotalBalanceForActiveLegacyAddresses()
     
   wallet.setDefaultAccount = (account) ->
-    wallet.my.setDefaultAccountIndex(account.index)
+    wallet.store.setDefaultAccountIndex(account.index)
     wallet.updateAccounts()
     
   wallet.isValidBIP39Mnemonic = (mnemonic) ->

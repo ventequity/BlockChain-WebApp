@@ -1,15 +1,58 @@
 walletStoreServices = angular.module("myWalletStoreServices", [])
 walletStoreServices.factory "MyWalletStore", () ->
   transactions = [];
+  notes = {}
+  
+  eventListener = undefined
+  
+  password = undefined
+  
+  defaultAccountIndex = 0
+  
+  isSynchronizedWithServer = true # In the sense that the server is up to date
   
   addressBook = { # The same for everyone
       "17gJCBiPBwY5x43DZMH3UJ7btHZs6oPAGq": "John"
       "1LJuG6yvRh8zL9DQ2PTYjdNydipbSUQeq": "Alice"
   }
   
+  feePolicy = 0
+  
+  
   legacyAddresses = {}
   
   {
+    isSynchronizedWithServer: () ->
+      isSynchronizedWithServer
+      
+    setIsSynchronizedWithServer: (setting) ->
+      isSynchronizedWithServer = setting
+    
+    sendEvent: (event) ->
+      eventListener(event)
+      
+    getFeePolicy: () ->
+      return feePolicy
+    
+    setFeePolicy: (policy) ->
+      feePolicy = policy
+      return
+      
+    getMultiAccountSetting: () ->
+        true
+        
+    getLogoutTime: () ->
+        10
+      
+    addEventListener: (func) ->
+        eventListener = func
+        
+    getPbkdf2Iterations: () ->
+      10
+      
+    setPbkdf2Iterations: () ->
+      return
+    
     getLanguages: () ->
       {de: "Deutch", en: "English", nl: "Nederlands"}
     
@@ -21,6 +64,15 @@ walletStoreServices.factory "MyWalletStore", () ->
     
     isMnemonicVerified: () ->
       false
+      
+    isCorrectMainPassword: (candidate) ->
+      candidate == password
+    
+    changePassword: (newPassword) ->
+      password = newPassword
+      # wallets = localStorageService.get("mockWallets")
+      # wallets[myWallet.uid].password = newPassword
+      # localStorageService.set("mockWallets", wallets)
     
     getAllTransactions: (idx) ->
       res = []
@@ -80,7 +132,35 @@ walletStoreServices.factory "MyWalletStore", () ->
     unArchiveLegacyAddr: (address) ->
       return    
       
+    getDefaultAccountIndex: () ->
+      return defaultAccountIndex
+    
+    setDefaultAccountIndex: (idx) ->
+      defaultAccountIndex = idx
+      return
+      
+    getDoubleEncryption: () ->
+      return false
+      
+    getNote: (hash) ->
+      notes[hash]
+    
+    setNote: (hash, text) ->
+      notes[hash] = text
+      # Circular reference:
+      # MyWallet.sync()
+      return
+      
     # Mock only:
+    
+    mockSetPassword: (pwd) ->
+      password = pwd
+    
+    setNotes: (theNotes) ->
+      notes = theNotes
+    
+    getNotes: () ->
+      notes
       
     setTransactions: (theTransactions) ->
       transactions = theTransactions
