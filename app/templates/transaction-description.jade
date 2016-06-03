@@ -21,7 +21,7 @@
   .hidden-tablet.flex-start.flex-column.mvm(ng-show="tx.toggled")
     transaction-destinations(transaction="tx" search="search")
   .flex-start.flex-between.dark-grey(ng-if="tx.toggled")
-    .destination.flex-align-self-end.pointer
+    .flex-column.flex-align-self-end.pointer
       transaction-status(transaction="tx")
     .flex-1.hidden-sm.hidden-xs.pointer(ng-click="tx.toggled = !tx.toggled")
       div

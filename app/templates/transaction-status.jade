@@ -1,5 +1,6 @@
 .flex-column(ng-if="!complete")
-  .flex-row.flex-end
+  .flex-row(ng-class="transaction.rbf || transaction.double_spend ? 'flex-between' : 'flex-end'")
+    transaction-warning(transaction="transaction")
     helper-button(content="{{ 'TRANSACTION_WILL_COMPLETE_IN' | translate:{minutes: minutesRemaining } }}" ng-if="!frugalWarning" append="true")
     helper-button(content="{{ 'TRANSACTION_FRUGAL' | translate }}" ng-if="frugalWarning" append="true")
   uib-progressbar.mts(value=":: transaction.confirmations" max="3" ng-click="verify()")
@@ -10,6 +11,7 @@
     span.pls(translate="CONFIRMATIONS")
 
 .success.flex-column(ng-if="complete" ng-click="verify()")
+  transaction-warning(transaction="transaction")
   .flex-row
     span.mrs.mbn.em-400(translate="TRANSACTION_COMPLETE")
     i.ti-check.em-600
