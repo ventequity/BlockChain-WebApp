@@ -21,6 +21,7 @@ function TransferController ($scope, $state, $timeout, $q, $uibModalInstance, Wa
 
     let paymentsP = $scope.addresses.reduce((chain, a) => chain.then(payments => $q(resolve => {
       let p = new Wallet.Payment().from(a.address).to(index).useAll();
+      $scope.selectedAccount.incrementReceiveIndex();
       p.sideEffect(() => resolve(payments.concat(p)));
     })), $q.resolve([]));
 

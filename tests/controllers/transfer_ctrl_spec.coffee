@@ -1,5 +1,6 @@
 describe "TransferControllerSpec", ->
   Wallet = undefined
+  MyWallet = undefined
   scope = undefined
   rootScope = undefined
   controller = undefined
@@ -35,12 +36,14 @@ describe "TransferControllerSpec", ->
       MyWallet = $injector.get("MyWallet")
       MyWalletPayment = $injector.get("MyWalletPayment")
 
-      Wallet.accounts = () -> [{label: 'Savings'}, {label: 'Party Money'}]
+      makeAcct = (label, i) => label: label, index: i, incrementReceiveIndex: (->)
+      Wallet.accounts = () -> ['Default', 'Savings', 'Party Money'].map(makeAcct)
       Wallet.legacyAddresses = () -> spendableAddresses
       Wallet.askForSecondPasswordIfNeeded = () -> $q.resolve('pw')
       Wallet.payment = () -> new MyWalletPayment()
 
-      MyWallet.wallet = { hdwallet: { defaultAccount: { label: 'Default', index: 1 } } }
+      MyWallet.wallet = { hdwallet: { defaultAccount: Wallet.accounts()[0] } }
+      spyOn(MyWallet.wallet.hdwallet.defaultAccount, 'incrementReceiveIndex')
 
       scope = getControllerScope(spendableAddresses)
 
@@ -54,3 +57,7 @@ describe "TransferControllerSpec", ->
 
   it "should combine the balances of addresses", ->
     expect(scope.combinedBalance).toEqual(30000)
+
+  it "should increment the account receive index", ->
+    expect(MyWallet.wallet.hdwallet.defaultAccount.incrementReceiveIndex)
+      .toHaveBeenCalled()
